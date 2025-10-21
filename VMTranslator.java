@@ -1,6 +1,11 @@
 import java.io.*;
 import java.util.*;
-
+/*
+ * Como usarlo:
+ * Compilar los archiivos .java: javac *.java
+ * Ejecutar el traductor: java VMTranslator <archivo.vm o carpeta>
+ * Ejemplo: java VMTranslator example.vm
+ */
 public class VMTranslator {
     public static void main(String[] args) throws IOException {
         if (args.length != 1) {
