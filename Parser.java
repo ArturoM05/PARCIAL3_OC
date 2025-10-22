@@ -32,11 +32,19 @@ public class Parser {
         if (currentCommand == null) return null;
         if (currentCommand.startsWith("push")) return CommandType.C_PUSH;
         if (currentCommand.startsWith("pop")) return CommandType.C_POP;
+        if (currentCommand.startsWith("label")) return CommandType.C_LABEL;
+        if (currentCommand.startsWith("goto")) return CommandType.C_GOTO;
+        if (currentCommand.startsWith("if-goto")) return CommandType.C_IF;
+        if (currentCommand.startsWith("function")) return CommandType.C_FUNCTION;
+        if (currentCommand.startsWith("call")) return CommandType.C_CALL;
+        if (currentCommand.startsWith("return")) return CommandType.C_RETURN;
         return CommandType.C_ARITHMETIC;
     }
 
     public String arg1() {
-        if (commandType() == CommandType.C_ARITHMETIC) return currentCommand;
+        CommandType type = commandType();
+        if (type == CommandType.C_ARITHMETIC) return currentCommand;
+        if (type == CommandType.C_RETURN) return null; // return no tiene argumentos
         return currentCommand.split(" ")[1];
     }
 
