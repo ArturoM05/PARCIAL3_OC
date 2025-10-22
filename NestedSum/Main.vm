@@ -1,0 +1,85 @@
+// Main.vm
+// Contiene las funciones del cálculo de la serie
+
+// Función principal: calcula Σ(i² + 1)
+function Main.computeSum 2
+// Local[0] = i
+// Local[1] = sum
+    push constant 0
+    pop local 0         // i = 0
+    push constant 0
+    pop local 1         // sum = 0
+
+(LOOP_START)
+    // if (i > n) goto END_LOOP
+    push local 0        // i
+    push argument 0     // n
+    gt
+    if-goto END_LOOP
+
+    // square(i)
+    push local 0
+    call Main.square 1
+
+    // addOne(resultado de square)
+    call Main.addOne 1
+
+    // sum = sum + (resultado)
+    push local 1
+    add
+    pop local 1
+
+    // i = i + 1
+    push local 0
+    push constant 1
+    add
+    pop local 0
+
+    goto LOOP_START
+
+(END_LOOP)
+    // Retorna sum
+    push local 1
+    return
+
+
+// Función que calcula x² (sin usar mul)
+function Main.square 2
+    push constant 0
+    pop local 0          // contador = 0
+    push constant 0
+    pop local 1          // acumulador = 0
+
+(SQUARE_LOOP)
+    // while (contador < x)
+    push argument 0
+    push local 0
+    gt
+    if-goto SQUARE_BODY
+    goto SQUARE_END
+
+(SQUARE_BODY)
+    // acumulador = acumulador + x
+    push local 1
+    push argument 0
+    add
+    pop local 1
+
+    // contador++
+    push local 0
+    push constant 1
+    add
+    pop local 0
+
+    goto SQUARE_LOOP
+
+(SQUARE_END)
+    push local 1
+    return
+
+// Función que suma 1 al argumento
+function Main.addOne 0
+    push argument 0
+    push constant 1
+    add
+    return

@@ -1,11 +1,13 @@
 import java.io.*;
 import java.util.*;
+
 /*
  * Como usarlo:
  * Compilar los archiivos .java: javac *.java
  * Ejecutar el traductor: java VMTranslator <archivo.vm o carpeta>
  * Ejemplo: java VMTranslator example.vm
  */
+
 public class VMTranslator {
     public static void main(String[] args) throws IOException {
         if (args.length != 1) {
@@ -25,11 +27,20 @@ public class VMTranslator {
 
         CodeWriter codeWriter = new CodeWriter(outputFile.getPath());
 
+        // Si es un directorio, escribimos el bootstrap (SP=256 y call Sys.init 0)
         if (input.isDirectory()) {
-            for (File file : Objects.requireNonNull(input.listFiles((d, name) -> name.endsWith(".vm")))) {
-                processFile(file, codeWriter);
+            codeWriter.writeInit();
+            // Procesar todos los .vm dentro del directorio
+            File[] vmFiles = input.listFiles((d, name) -> name.endsWith(".vm"));
+            if (vmFiles != null) {
+                // es conveniente procesar Sys.vm primero (si existe), aunque no es estrictamente necesario
+                Arrays.sort(vmFiles, Comparator.comparing(File::getName));
+                for (File file : vmFiles) {
+                    processFile(file, codeWriter);
+                }
             }
         } else {
+            // archivo individual
             processFile(input, codeWriter);
         }
 

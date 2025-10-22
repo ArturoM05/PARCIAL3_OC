@@ -1,0 +1,7 @@
+// Sys.vm
+function Sys.init 0
+    push constant 3
+    call Main.computeSum 1
+    pop temp 0   // opcional: guarda resultado
+    // Retorna el valor al stack
+    return
