@@ -26,6 +26,7 @@ public class VMTranslator {
         CodeWriter codeWriter = new CodeWriter(outputFile.getPath());
 
         if (input.isDirectory()) {
+            codeWriter.writeBootstrap();
             for (File file : Objects.requireNonNull(input.listFiles((d, name) -> name.endsWith(".vm")))) {
                 processFile(file, codeWriter);
             }
