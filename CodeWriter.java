@@ -2,201 +2,334 @@ import java.io.*;
 
 public class CodeWriter {
     private BufferedWriter out;
-    private String fileName;
+    private String currentFileName = "Sys"; // para variables static: FileName.index
     private int labelCounter = 0;
+    private String currentFunction = ""; // nombre de la función actual
 
-    public CodeWriter(String outputFile) throws IOException {
-        out = new BufferedWriter(new FileWriter(outputFile));
+    public CodeWriter(String outputPath) throws IOException {
+        out = new BufferedWriter(new FileWriter(outputPath));
     }
 
     public void setFileName(String fileName) {
-        this.fileName = fileName;
+        // fileName sin .vm
+        this.currentFileName = fileName;
+    }
+
+    // Escribe código de inicialización (bootstrap)
+    public void writeInit() throws IOException {
+        // SP = 256
+        out.write("// bootstrap\n");
+        out.write("@256\n");
+        out.write("D=A\n");
+        out.write("@SP\n");
+        out.write("M=D\n");
+        // llamar a Sys.init
+        writeCall("Sys.init", 0);
     }
 
     public void writeArithmetic(String command) throws IOException {
-        switch (command) {
-            case "add":
-                writeBinaryOp("M=D+M");
-                break;
-            case "sub":
-                writeBinaryOp("M=M-D");
-                break;
-            case "neg":
-                writeUnaryOp("M=-M");
-                break;
-            case "eq":
-                writeComparison("JEQ");
-                break;
-            case "gt":
-                writeComparison("JGT");
-                break;
-            case "lt":
-                writeComparison("JLT");
-                break;
-            case "and":
-                writeBinaryOp("M=M&D");
-                break;
-            case "or":
-                writeBinaryOp("M=M|D");
-                break;
-            case "not":
-                writeUnaryOp("M=!M");
-                break;
+        out.write("// " + command + "\n");
+        if (command.equals("add")) {
+            writeBinary("M=M+D");
+        } else if (command.equals("sub")) {
+            writeBinary("M=M-D");
+        } else if (command.equals("and")) {
+            writeBinary("M=M&D");
+        } else if (command.equals("or")) {
+            writeBinary("M=M|D");
+        } else if (command.equals("eq")) {
+            writeComparison("JEQ");
+        } else if (command.equals("gt")) {
+            writeComparison("JGT");
+        } else if (command.equals("lt")) {
+            writeComparison("JLT");
+        } else if (command.equals("neg")) {
+            writeUnary("M=-M");
+        } else if (command.equals("not")) {
+            writeUnary("M=!M");
+        } else {
+            // desconocido -> ignorar
         }
     }
 
-    private void writeBinaryOp(String operation) throws IOException {
-        out.write("@SP\nAM=M-1\nD=M\nA=A-1\n" + operation + "\n");
+    private void writeBinary(String op) throws IOException {
+        // SP-- ; D = *SP ; A = SP-1 ; M = M op D
+        out.write("@SP\n");
+        out.write("AM=M-1\n");
+        out.write("D=M\n");
+        out.write("A=A-1\n");
+        out.write(op + "\n");
     }
 
-    private void writeUnaryOp(String operation) throws IOException {
-        out.write("@SP\nA=M-1\n" + operation + "\n");
+    private void writeUnary(String op) throws IOException {
+        // A = SP-1 ; M = op
+        out.write("@SP\n");
+        out.write("A=M-1\n");
+        out.write(op + "\n");
     }
 
     private void writeComparison(String jump) throws IOException {
-        String labelTrue = "TRUE_" + labelCounter;
-        String labelEnd = "END_" + labelCounter;
+        String labelTrue = "TRUE$" + labelCounter;
+        String labelEnd = "END$" + labelCounter;
         labelCounter++;
-        out.write(
-            "@SP\nAM=M-1\nD=M\nA=A-1\nD=M-D\n" +
-            "@" + labelTrue + "\nD;" + jump + "\n" +
-            "@SP\nA=M-1\nM=0\n" +
-            "@" + labelEnd + "\n0;JMP\n" +
-            "(" + labelTrue + ")\n@SP\nA=M-1\nM=-1\n" +
-            "(" + labelEnd + ")\n"
-        );
+
+        out.write("@SP\n");
+        out.write("AM=M-1\n"); // SP-- ; A = SP
+        out.write("D=M\n");    // D = y
+        out.write("A=A-1\n");  // A = x
+        out.write("D=M-D\n");  // D = x - y
+        out.write("@" + labelTrue + "\n");
+        out.write("D;" + jump + "\n");
+        // false
+        out.write("@SP\n");
+        out.write("A=M-1\n");
+        out.write("M=0\n");
+        out.write("@" + labelEnd + "\n");
+        out.write("0;JMP\n");
+        // true
+        out.write("(" + labelTrue + ")\n");
+        out.write("@SP\n");
+        out.write("A=M-1\n");
+        out.write("M=-1\n");
+        // end
+        out.write("(" + labelEnd + ")\n");
     }
 
+    // push/pop
     public void writePushPop(CommandType type, String segment, int index) throws IOException {
+        out.write("// " + (type == CommandType.C_PUSH ? "push " : "pop ") + segment + " " + index + "\n");
         if (type == CommandType.C_PUSH) {
             if (segment.equals("constant")) {
-                out.write("@" + index + "\nD=A\n");
-            } else if (segment.equals("local")) {
-                writeSegmentPush("LCL", index);
-            } else if (segment.equals("argument")) {
-                writeSegmentPush("ARG", index);
-            } else if (segment.equals("this")) {
-                writeSegmentPush("THIS", index);
-            } else if (segment.equals("that")) {
-                writeSegmentPush("THAT", index);
+                out.write("@" + index + "\n");
+                out.write("D=A\n");
+                pushD();
+            } else if (segment.equals("local") || segment.equals("argument") ||
+                       segment.equals("this") || segment.equals("that")) {
+                String base = segmentToBase(segment);
+                // D = *(base + index)
+                out.write("@" + base + "\n");
+                out.write("D=M\n");
+                out.write("@" + index + "\n");
+                out.write("A=D+A\n");
+                out.write("D=M\n");
+                pushD();
             } else if (segment.equals("temp")) {
-                out.write("@" + (5 + index) + "\nD=M\n");
+                int addr = 5 + index;
+                out.write("@" + addr + "\n");
+                out.write("D=M\n");
+                pushD();
             } else if (segment.equals("pointer")) {
-                out.write("@" + (index == 0 ? "THIS" : "THAT") + "\nD=M\n");
+                String which = (index == 0 ? "THIS" : "THAT");
+                out.write("@" + which + "\n");
+                out.write("D=M\n");
+                pushD();
             } else if (segment.equals("static")) {
-                out.write("@" + fileName + "." + index + "\nD=M\n");
+                out.write("@" + currentFileName + "." + index + "\n");
+                out.write("D=M\n");
+                pushD();
+            } else {
+                // segmento desconocido
             }
-            out.write("@SP\nA=M\nM=D\n@SP\nM=M+1\n");
         } else if (type == CommandType.C_POP) {
             if (segment.equals("local") || segment.equals("argument") ||
                 segment.equals("this") || segment.equals("that")) {
-                writeSegmentPop(segment, index);
+                String base = segmentToBase(segment);
+                // R13 = base + index
+                out.write("@" + base + "\n");
+                out.write("D=M\n");
+                out.write("@" + index + "\n");
+                out.write("D=D+A\n");
+                out.write("@R13\n");
+                out.write("M=D\n");
+                // pop -> D
+                popToD();
+                // *R13 = D
+                out.write("@R13\n");
+                out.write("A=M\n");
+                out.write("M=D\n");
             } else if (segment.equals("temp")) {
-                writeDirectPop(5 + index);
+                int addr = 5 + index;
+                popToD();
+                out.write("@" + addr + "\n");
+                out.write("M=D\n");
             } else if (segment.equals("pointer")) {
-                out.write("@SP\nAM=M-1\nD=M\n@" + (index == 0 ? "THIS" : "THAT") + "\nM=D\n");
+                String which = (index == 0 ? "THIS" : "THAT");
+                popToD();
+                out.write("@" + which + "\n");
+                out.write("M=D\n");
             } else if (segment.equals("static")) {
-                out.write("@SP\nAM=M-1\nD=M\n@" + fileName + "." + index + "\nM=D\n");
+                popToD();
+                out.write("@" + currentFileName + "." + index + "\n");
+                out.write("M=D\n");
+            } else {
+                // segmento desconocido
             }
         }
     }
 
-    private void writeSegmentPush(String base, int index) throws IOException {
-        out.write("@" + base + "\nD=M\n@" + index + "\nA=D+A\nD=M\n");
+    private String segmentToBase(String seg) {
+        if (seg.equals("local")) return "LCL";
+        if (seg.equals("argument")) return "ARG";
+        if (seg.equals("this")) return "THIS";
+        if (seg.equals("that")) return "THAT";
+        return "";
     }
 
-    private void writeSegmentPop(String segment, int index) throws IOException {
-        String base = "";
-        if (segment.equals("local")) base = "LCL";
-        else if (segment.equals("argument")) base = "ARG";
-        else if (segment.equals("this")) base = "THIS";
-        else if (segment.equals("that")) base = "THAT";
-
-        out.write("@" + base + "\nD=M\n@" + index + "\nD=D+A\n@R13\nM=D\n");
-        out.write("@SP\nAM=M-1\nD=M\n@R13\nA=M\nM=D\n");
+    private void pushD() throws IOException {
+        out.write("@SP\n");
+        out.write("A=M\n");
+        out.write("M=D\n");
+        out.write("@SP\n");
+        out.write("M=M+1\n");
     }
 
-    private void writeDirectPop(int address) throws IOException {
-        out.write("@SP\nAM=M-1\nD=M\n@" + address + "\nM=D\n");
+    private void popToD() throws IOException {
+        out.write("@SP\n");
+        out.write("AM=M-1\n");
+        out.write("D=M\n");
     }
 
+    // flow control: label, goto, if-goto
     public void writeLabel(String label) throws IOException {
-        out.write("(" + label + ")\n");
+        String full = functionScopedLabel(label);
+        out.write("// label " + full + "\n");
+        out.write("(" + full + ")\n");
     }
 
     public void writeGoto(String label) throws IOException {
-        out.write("@" + label + "\n0;JMP\n");
+        String full = functionScopedLabel(label);
+        out.write("// goto " + full + "\n");
+        out.write("@" + full + "\n");
+        out.write("0;JMP\n");
     }
 
     public void writeIf(String label) throws IOException {
-        out.write("@SP\nAM=M-1\nD=M\n@" + label + "\nD;JNE\n");
+        String full = functionScopedLabel(label);
+        out.write("// if-goto " + full + "\n");
+        popToD();
+        out.write("@" + full + "\n");
+        out.write("D;JNE\n");
     }
 
-    public void writeCall(String functionName, int nArgs) throws IOException {
-        String returnLabel = "RET_" + (labelCounter++);
-
-        // push return-address
-        out.write("@" + returnLabel + "\nD=A\n@SP\nA=M\nM=D\n@SP\nM=M+1\n");
-        // push LCL
-        out.write("@LCL\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n");
-        // push ARG
-        out.write("@ARG\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n");
-        // push THIS
-        out.write("@THIS\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n");
-        // push THAT
-        out.write("@THAT\nD=M\n@SP\nA=M\nM=D\n@SP\nM=M+1\n");
-
-        // ARG = SP - 5 - nArgs
-        out.write("@SP\nD=M\n@5\nD=D-A\n@" + nArgs + "\nD=D-A\n@ARG\nM=D\n");
-        // LCL = SP
-        out.write("@SP\nD=M\n@LCL\nM=D\n");
-        // goto functionName
-        out.write("@" + functionName + "\n0;JMP\n");
-        // (return-address)
-        out.write("(" + returnLabel + ")\n");
-    }
-
-    public void writeFunction(String functionName, int nVars) throws IOException {
-        out.write("(" + functionName + ")\n");
-        for (int i = 0; i < nVars; i++) {
-            out.write("@SP\nA=M\nM=0\n@SP\nM=M+1\n");
+    private String functionScopedLabel(String label) {
+        if (currentFunction == null || currentFunction.isEmpty()) {
+            return label;
+        } else {
+            return currentFunction + "$" + label;
         }
     }
 
-    public void writeReturn() throws IOException {
-        // FRAME = LCL (guarda el frame en R13)
-        out.write("@LCL\nD=M\n@R13\nM=D\n");
-    
-        // RET = *(FRAME-5) (guarda la dirección de retorno en R14)
-        out.write("@5\nA=D-A\nD=M\n@R14\nM=D\n");
-    
-        // *ARG = pop() (coloca el valor de retorno para el llamador)
-        out.write("@SP\nAM=M-1\nD=M\n@ARG\nA=M\nM=D\n");
-    
-        // SP = ARG+1 (reposiciona SP)
-        out.write("@ARG\nD=M+1\n@SP\nM=D\n");
-    
-        // THAT = *(FRAME-1) (restaura THAT del llamador)
-        out.write("@R13\nAM=M-1\nD=M\n@THAT\nM=D\n");
-    
-        // THIS = *(FRAME-2) (restaura THIS del llamador)
-        out.write("@R13\nAM=M-1\nD=M\n@THIS\nM=D\n");
-    
-        // ARG = *(FRAME-3) (restaura ARG del llamador)
-        out.write("@R13\nAM=M-1\nD=M\n@ARG\nM=D\n");
-    
-        // LCL = *(FRAME-4) (restaura LCL del llamador)
-        out.write("@R13\nAM=M-1\nD=M\n@LCL\nM=D\n");
-    
-        // goto RET (salta a la dirección de retorno)
-        out.write("@R14\nA=M\n0;JMP\n");
+    // functions: function, call, return
+
+    // function f n: declara n variables locales (push 0 n veces) y setea currentFunction
+    public void writeFunction(String functionName, int nVars) throws IOException {
+        this.currentFunction = functionName;
+        out.write("// function " + functionName + " " + nVars + "\n");
+        out.write("(" + functionName + ")\n");
+        // inicializar nVars a 0 en la pila
+        for (int i = 0; i < nVars; i++) {
+            out.write("@0\n");
+            out.write("D=A\n");
+            pushD();
+        }
     }
 
-    public void writeBootstrap() throws IOException {
-        // Inicializa SP=256
-        out.write("@256\nD=A\n@SP\nM=D\n");
-        // Llama a Sys.init
-        writeCall("Sys.init", 0);
+    // call f nArgs
+    public void writeCall(String functionName, int nArgs) throws IOException {
+        String returnLabel = "RET$" + functionName + "$" + labelCounter;
+        labelCounter++;
+
+        out.write("// call " + functionName + " " + nArgs + "\n");
+        // push return-address
+        out.write("@" + returnLabel + "\n");
+        out.write("D=A\n");
+        pushD();
+        // push LCL
+        out.write("@LCL\nD=M\n");
+        pushD();
+        // push ARG
+        out.write("@ARG\nD=M\n");
+        pushD();
+        // push THIS
+        out.write("@THIS\nD=M\n");
+        pushD();
+        // push THAT
+        out.write("@THAT\nD=M\n");
+        pushD();
+
+        // ARG = SP - nArgs - 5
+        out.write("@SP\n");
+        out.write("D=M\n");
+        out.write("@" + (nArgs + 5) + "\n");
+        out.write("D=D-A\n");
+        out.write("@ARG\n");
+        out.write("M=D\n");
+
+        // LCL = SP
+        out.write("@SP\n");
+        out.write("D=M\n");
+        out.write("@LCL\n");
+        out.write("M=D\n");
+
+        // goto functionName
+        out.write("@" + functionName + "\n");
+        out.write("0;JMP\n");
+
+        // (returnLabel)
+        out.write("(" + returnLabel + ")\n");
+    }
+
+    public void writeReturn() throws IOException {
+        out.write("// return\n");
+        // FRAME = LCL (R13)
+        out.write("@LCL\n");
+        out.write("D=M\n");
+        out.write("@R13\n");
+        out.write("M=D\n");
+        // RET = *(FRAME - 5) (R14)
+        out.write("@5\n");
+        out.write("A=D-A\n");
+        out.write("D=M\n");
+        out.write("@R14\n");
+        out.write("M=D\n");
+        // *ARG = pop()
+        popToD();
+        out.write("@ARG\n");
+        out.write("A=M\n");
+        out.write("M=D\n");
+        // SP = ARG + 1
+        out.write("@ARG\n");
+        out.write("D=M+1\n");
+        out.write("@SP\n");
+        out.write("M=D\n");
+        // THAT = *(FRAME - 1)
+        out.write("@R13\n");
+        out.write("AM=M-1\n"); // R13 = FRAME-1 ; A = R13
+        out.write("D=M\n");
+        out.write("@THAT\n");
+        out.write("M=D\n");
+        // THIS = *(FRAME - 2)
+        out.write("@R13\n");
+        out.write("AM=M-1\n");
+        out.write("D=M\n");
+        out.write("@THIS\n");
+        out.write("M=D\n");
+        // ARG = *(FRAME - 3)
+        out.write("@R13\n");
+        out.write("AM=M-1\n");
+        out.write("D=M\n");
+        out.write("@ARG\n");
+        out.write("M=D\n");
+        // LCL = *(FRAME - 4)
+        out.write("@R13\n");
+        out.write("AM=M-1\n");
+        out.write("D=M\n");
+        out.write("@LCL\n");
+        out.write("M=D\n");
+        // goto RET
+        out.write("@R14\n");
+        out.write("A=M\n");
+        out.write("0;JMP\n");
     }
 
     public void close() throws IOException {

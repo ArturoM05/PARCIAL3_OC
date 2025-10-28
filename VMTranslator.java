@@ -1,67 +1,77 @@
 import java.io.*;
 import java.util.*;
-/*
- * Como usarlo:
- * Compilar los archiivos .java: javac *.java
- * Ejecutar el traductor: java VMTranslator <archivo.vm o carpeta>
- * Ejemplo: java VMTranslator example.vm
- */
+
 public class VMTranslator {
     public static void main(String[] args) throws IOException {
         if (args.length != 1) {
-            System.out.println("Uso: java VMTranslator <archivo.vm o carpeta>");
-            return;
+            System.err.println("Uso: java VMTranslator <archivo.vm | carpeta>");
+            System.exit(1);
         }
 
         File input = new File(args[0]);
-        File outputFile;
+        List<File> vmFiles = new ArrayList<File>();
+        String outputPath;
 
         if (input.isDirectory()) {
-            String dirName = input.getName();
-            outputFile = new File(input, dirName + ".asm");
+            File[] files = input.listFiles(new FilenameFilter() {
+                public boolean accept(File dir, String name) {
+                    return name.endsWith(".vm");
+                }
+            });
+            if (files != null) {
+                Arrays.sort(files);
+                for (File f : files) vmFiles.add(f);
+            }
+            outputPath = new File(input, input.getName() + ".asm").getPath();
         } else {
-            outputFile = new File(input.getParent(), input.getName().replace(".vm", ".asm"));
+            if (!input.getName().endsWith(".vm")) {
+                System.err.println("El archivo de entrada debe ser .vm o una carpeta que contenga .vm");
+                return;
+            }
+            vmFiles.add(input);
+            String outName = input.getName().replaceAll("\\.vm$", ".asm");
+            outputPath = new File(input.getParent(), outName).getPath();
         }
 
-        CodeWriter codeWriter = new CodeWriter(outputFile.getPath());
+        CodeWriter writer = new CodeWriter(outputPath);
 
+        // Si hay más de un archivo (o es carpeta) escribimos bootstrap
         if (input.isDirectory()) {
-            codeWriter.writeBootstrap();
-            for (File file : Objects.requireNonNull(input.listFiles((d, name) -> name.endsWith(".vm")))) {
-                processFile(file, codeWriter);
-            }
-        } else {
-            processFile(input, codeWriter);
+            writer.writeInit();
         }
 
-        codeWriter.close();
-        System.out.println("Traducción completada: " + outputFile.getPath());
-    }
+        for (File vm : vmFiles) {
+            Parser parser = new Parser(vm.getPath());
+            // set file name para variables static
+            String base = vm.getName();
+            if (base.endsWith(".vm")) base = base.substring(0, base.length() - 3);
+            writer.setFileName(base);
 
-    private static void processFile(File file, CodeWriter codeWriter) throws IOException {
-        Parser parser = new Parser(file.getPath());
-        codeWriter.setFileName(file.getName().replace(".vm", ""));
-        while (parser.hasMoreCommands()) {
-            parser.advance();
-            if (parser.commandType() == null) continue;
-            CommandType type = parser.commandType();
-            if (type == CommandType.C_ARITHMETIC) {
-                codeWriter.writeArithmetic(parser.arg1());
-            } else if (type == CommandType.C_PUSH || type == CommandType.C_POP) {
-                codeWriter.writePushPop(type, parser.arg1(), parser.arg2());
-            } else if (type == CommandType.C_LABEL) {
-                codeWriter.writeLabel(parser.arg1());
-            } else if (type == CommandType.C_GOTO) {
-                codeWriter.writeGoto(parser.arg1());
-            } else if (type == CommandType.C_IF) {
-                codeWriter.writeIf(parser.arg1());
-            } else if (type == CommandType.C_FUNCTION) {
-                codeWriter.writeFunction(parser.arg1(), parser.arg2());
-            } else if (type == CommandType.C_CALL) {
-                codeWriter.writeCall(parser.arg1(), parser.arg2());
-            } else if (type == CommandType.C_RETURN) {
-                codeWriter.writeReturn();
+            while (parser.hasMoreCommands()) {
+                parser.advance();
+                CommandType type = parser.commandType();
+                if (type == null) continue;
+                if (type == CommandType.C_ARITHMETIC) {
+                    writer.writeArithmetic(parser.arg1());
+                } else if (type == CommandType.C_PUSH || type == CommandType.C_POP) {
+                    writer.writePushPop(type, parser.arg1(), parser.arg2());
+                } else if (type == CommandType.C_LABEL) {
+                    writer.writeLabel(parser.arg1());
+                } else if (type == CommandType.C_GOTO) {
+                    writer.writeGoto(parser.arg1());
+                } else if (type == CommandType.C_IF) {
+                    writer.writeIf(parser.arg1());
+                } else if (type == CommandType.C_FUNCTION) {
+                    writer.writeFunction(parser.arg1(), parser.arg2());
+                } else if (type == CommandType.C_CALL) {
+                    writer.writeCall(parser.arg1(), parser.arg2());
+                } else if (type == CommandType.C_RETURN) {
+                    writer.writeReturn();
+                }
             }
         }
+
+        writer.close();
+        System.out.println("Generado: " + outputPath);
     }
 }
