@@ -1,0 +1,5 @@
+function Sys.init 0
+push constant 3      // cambia este n para probar
+call Main.computeSum 1
+label END
+goto END

@@ -1,59 +1,63 @@
-function Sys.init 0
-push constant 3
-call Main.fact 1
-pop static 0   // guarda factorial(3)
-label END
-goto END
+function Main.computeSum 2
+push constant 0
+pop local 0
+push constant 0
+pop local 1
 
-function Main.fact 0
+label LOOP_START
+push local 1
 push argument 0
-push constant 2
-lt
-if-goto BASE_CASE
+gt
+if-goto LOOP_END
 
-// recursive case: n * fact(n - 1)
-push argument 0
-push argument 0
+push local 1
+call Main.square 1
+call Main.addOne 1
+
+push local 0
+add
+pop local 0
+
+push local 1
 push constant 1
-sub
-call Main.fact 1
-call Math.multiply 2
+add
+pop local 1
+
+goto LOOP_START
+label LOOP_END
+push local 0
 return
 
-label BASE_CASE
-push constant 1
-return
-
-function Math.multiply 1   // <-- corregido
-push argument 0
-push argument 1
-lt
-if-goto SWAP
-goto CONT
-
-label SWAP
-push argument 0
-push argument 1
-pop argument 0
-pop argument 1
-
-label CONT
+function Main.square 2
 push constant 0
-pop local 0 // acumulador
-label LOOP
-push argument 1
+pop local 0
+push argument 0
+pop local 1
+
+label SQ_LOOP
+push local 1
 push constant 0
-eq
-if-goto END
+gt
+if-goto DO_ADD
+goto SQ_END
+
+label DO_ADD
 push local 0
 push argument 0
 add
 pop local 0
-push argument 1
+push local 1
 push constant 1
 sub
-pop argument 1
-goto LOOP
-label END
+pop local 1
+goto SQ_LOOP
+
+label SQ_END
 push local 0
+return
+
+function Main.addOne 0
+push argument 0
+push constant 1
+add
 return
