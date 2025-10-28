@@ -1,0 +1,63 @@
+function Main.computeSum 2
+    push constant 0
+    pop local 0
+    push constant 0
+    pop local 1
+
+label LOOP_START
+    push local 1
+    push argument 0
+    gt
+    if-goto LOOP_END
+
+    push local 1
+    call Main.square 1
+    call Main.addOne 1
+
+    push local 0
+    add
+    pop local 0
+
+    push local 1
+    push constant 1
+    add
+    pop local 1
+
+    goto LOOP_START
+    label LOOP_END
+    push local 0
+    return
+
+function Main.square 2
+    push constant 0
+    pop local 0
+    push argument 0
+    pop local 1
+
+    label SQ_LOOP
+    push local 1
+    push constant 0
+    gt
+    if-goto DO_ADD
+    goto SQ_END
+
+label DO_ADD
+    push local 0
+    push argument 0
+    add
+    pop local 0
+    push local 1
+    push constant 1
+    sub
+    pop local 1
+    goto SQ_LOOP
+
+    label SQ_END
+    push local 0
+    return
+
+function Main.addOne 0
+    push argument 0
+    push constant 1
+    add
+    return
