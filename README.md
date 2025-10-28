@@ -1,6 +1,6 @@
 # VM Translator - Nand2Tetris (Capítulos 7 y 8)
 
-Traductor de código de Máquina Virtual (VM) a lenguaje ensamblador Hack para el proyecto Nand2Tetris.
+Traductor de código de Máquina Virtual (VM) a lenguaje ensamblador Hack para el proyecto Nand2Tetris mediante el uso del project 7 modificaciones para el project 8 con requerimientos para parcial 3.
 
 ## Descripción
 
